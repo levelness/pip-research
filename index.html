@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Custom DASH Player (dash.js)</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0a0b12;
+        --panel: #111525;
+        --panel-strong: #0f1220;
+        --text: #e8f1ff;
+        --muted: #9aa7c7;
+        --neon-cyan: #36f7ff;
+        --neon-pink: #ff3fd1;
+        --neon-purple: #7b5cff;
+        --stroke: rgba(54, 247, 255, 0.35);
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        background: radial-gradient(circle at top, #121629, var(--bg) 55%);
+        color: var(--text);
+      }
+
+      .page {
+        max-width: 980px;
+        margin: 32px auto;
+        padding: 0 16px 32px;
+      }
+
+      .player-shell {
+        background: linear-gradient(135deg, #0c1020, #121733);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow:
+          0 16px 40px rgba(0, 0, 0, 0.45),
+          0 0 24px rgba(54, 247, 255, 0.15);
+        border: 1px solid rgba(54, 247, 255, 0.2);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .player-shell::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          120deg,
+          rgba(255, 63, 209, 0.15),
+          rgba(54, 247, 255, 0.08),
+          rgba(123, 92, 255, 0.1)
+        );
+        pointer-events: none;
+        mix-blend-mode: screen;
+      }
+
+      video {
+        width: 100%;
+        border-radius: 12px;
+        background: black;
+        box-shadow: 0 0 0 1px rgba(54, 247, 255, 0.2);
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 12px;
+        align-items: center;
+        margin-top: 12px;
+      }
+
+      .left,
+      .right {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      button,
+      select,
+      input[type="text"] {
+        background: linear-gradient(135deg, rgba(18, 26, 46, 0.95), rgba(9, 12, 24, 0.95));
+        border: 1px solid rgba(54, 247, 255, 0.25);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 6px 12px;
+        font-size: 14px;
+        letter-spacing: 0.2px;
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 63, 209, 0.08),
+          0 0 12px rgba(54, 247, 255, 0.2);
+        transition: transform 0.15s ease, box-shadow 0.15s ease, border 0.15s ease;
+      }
+
+      button {
+        cursor: pointer;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+
+      button:hover {
+        border-color: rgba(255, 63, 209, 0.6);
+        box-shadow:
+          0 0 14px rgba(255, 63, 209, 0.35),
+          0 0 24px rgba(54, 247, 255, 0.25);
+        transform: translateY(-1px);
+      }
+
+      button:active {
+        transform: translateY(0);
+        box-shadow: 0 0 10px rgba(54, 247, 255, 0.2);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .seek {
+        width: 100%;
+        accent-color: var(--neon-pink);
+      }
+
+      input[type="range"] {
+        height: 6px;
+        background: linear-gradient(90deg, rgba(255, 63, 209, 0.7), rgba(54, 247, 255, 0.7));
+        border-radius: 999px;
+        appearance: none;
+      }
+
+      input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--neon-cyan);
+        box-shadow: 0 0 10px rgba(54, 247, 255, 0.8);
+        border: 1px solid rgba(255, 63, 209, 0.8);
+      }
+
+      input[type="range"]::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--neon-cyan);
+        box-shadow: 0 0 10px rgba(54, 247, 255, 0.8);
+        border: 1px solid rgba(255, 63, 209, 0.8);
+      }
+
+      .meta {
+        margin-top: 12px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 120px 1fr auto;
+        gap: 8px;
+        align-items: center;
+      }
+
+      @media (max-width: 720px) {
+        .controls {
+          grid-template-columns: 1fr;
+        }
+
+        .right {
+          justify-content: space-between;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .player-shell {
+          padding: 10px;
+        }
+
+        button,
+        select,
+        input[type="text"] {
+          font-size: 12px;
+          padding: 6px 8px;
+        }
+
+        .controls {
+          gap: 8px;
+        }
+
+        .left,
+        .right {
+          width: 100%;
+        }
+
+        .seek {
+          order: 3;
+        }
+
+        .row {
+          grid-template-columns: 1fr;
+        }
+
+        .row button {
+          width: 100%;
+        }
+      }
+
+      @media (max-width: 380px) {
+        .controls {
+          grid-template-columns: 1fr;
+        }
+
+        .left,
+        .right {
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+
+        .right {
+          justify-content: flex-start;
+        }
+
+        .meta {
+          display: none;
+        }
+      }
+
+      @media (display-mode: picture-in-picture) {
+        body {
+          background: #0f1115;
+        }
+
+        .page {
+          margin: 0;
+          padding: 0;
+        }
+
+        .player-shell {
+          border-radius: 0;
+          box-shadow: none;
+          padding: 0;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+        }
+
+        video {
+          border-radius: 0;
+          flex: 1 1 auto;
+          object-fit: contain;
+        }
+
+        .controls {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          margin: 0;
+          padding: 8px;
+          background: linear-gradient(
+            to top,
+            rgba(0, 0, 0, 0.65),
+            rgba(0, 0, 0, 0)
+          );
+          grid-template-columns: 1fr;
+          gap: 6px;
+        }
+
+        .left,
+        .right {
+          justify-content: space-between;
+        }
+
+        .seek {
+          order: 1;
+        }
+
+        .right {
+          order: 2;
+        }
+
+        .left {
+          order: 3;
+        }
+
+        .meta {
+          display: none;
+        }
+      }
+
+      .badge {
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>Занимаюсь хуйней</h1>
+      <div id="custom-player" class="player-shell">
+        <video id="video" playsinline></video>
+
+        <div class="controls">
+          <div class="left">
+            <button id="playBtn">Play</button>
+            <button id="muteBtn">Mute</button>
+            <button id="pipBtn">PiP</button>
+          </div>
+
+          <input class="seek" id="seek" type="range" min="0" max="100" value="0" />
+
+          <div class="right">
+            <span class="badge" id="timeLabel">00:00 / 00:00</span>
+          </div>
+        </div>
+
+        <div class="meta">
+          <div class="row">
+            <label for="mpdInput">MPD URL</label>
+            <input
+              id="mpdInput"
+              type="text"
+              value="https://dash.akamaized.net/envivio/EnvivioDash3/manifest.mpd"
+            />
+            <button id="loadBtn">Load</button>
+          </div>
+          <div class="row">
+            <span>Состояние</span>
+            <span id="stateLabel">idle</span>
+            <span class="badge" id="bitrateLabel">-</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+    <script>
+      const video = document.getElementById("video");
+      const playBtn = document.getElementById("playBtn");
+      const muteBtn = document.getElementById("muteBtn");
+      const pipBtn = document.getElementById("pipBtn");
+      const seek = document.getElementById("seek");
+      const timeLabel = document.getElementById("timeLabel");
+      const mpdInput = document.getElementById("mpdInput");
+      const loadBtn = document.getElementById("loadBtn");
+      const qualitySelect = document.getElementById("qualitySelect");
+      const stateLabel = document.getElementById("stateLabel");
+      const bitrateLabel = document.getElementById("bitrateLabel");
+      const customPlayer = document.getElementById("custom-player");
+      const originalParent = customPlayer.parentElement;
+      const originalNextSibling = customPlayer.nextSibling;
+      let pipWindow = null;
+
+      const player = dashjs.MediaPlayer().create();
+      player.initialize(video, mpdInput.value, false);
+      player.updateSettings({
+        streaming: {
+          abr: {
+            autoSwitchBitrate: { video: true },
+          },
+        },
+      });
+
+      const formatTime = (value) => {
+        if (!Number.isFinite(value)) return "00:00";
+        const minutes = Math.floor(value / 60);
+        const seconds = Math.floor(value % 60);
+        return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+      };
+
+      const updateTime = () => {
+        const current = formatTime(video.currentTime);
+        const duration = formatTime(video.duration);
+        timeLabel.textContent = `${current} / ${duration}`;
+        if (Number.isFinite(video.duration) && video.duration > 0) {
+          seek.value = ((video.currentTime / video.duration) * 100).toFixed(2);
+        }
+      };
+
+      const populateQualities = () => {
+        const list = player.getBitrateInfoListFor("video");
+        qualitySelect.innerHTML = "";
+        const autoOption = document.createElement("option");
+        autoOption.value = "auto";
+        autoOption.textContent = "Auto";
+        qualitySelect.appendChild(autoOption);
+        list.forEach((item, idx) => {
+          const option = document.createElement("option");
+          option.value = String(idx);
+          option.textContent = `${item.height}p • ${Math.round(item.bitrate / 1000)} kbps`;
+          qualitySelect.appendChild(option);
+        });
+      };
+
+      const setState = (state) => {
+        stateLabel.textContent = state;
+      };
+
+      playBtn.addEventListener("click", () => {
+        if (video.paused) {
+          video.play();
+        } else {
+          video.pause();
+        }
+      });
+
+      muteBtn.addEventListener("click", () => {
+        video.muted = !video.muted;
+        muteBtn.textContent = video.muted ? "Unmute" : "Mute";
+      });
+
+      if (!("documentPictureInPicture" in window)) {
+        pipBtn.disabled = true;
+        pipBtn.title = "Document PiP не поддерживается в этом браузере";
+      }
+
+      const openPipWindow = async () => {
+        if (!("documentPictureInPicture" in window)) return;
+        if (pipWindow && !pipWindow.closed) return;
+
+        pipWindow = await documentPictureInPicture.requestWindow({
+          width: 480,
+          height: 270,
+        });
+
+        [...document.styleSheets].forEach((styleSheet) => {
+          try {
+            const cssRules = [...styleSheet.cssRules]
+              .map((rule) => rule.cssText)
+              .join("");
+            const style = document.createElement("style");
+            style.textContent = cssRules;
+            pipWindow.document.head.append(style);
+          } catch (error) {
+            if (!styleSheet.href) return;
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.type = styleSheet.type || "text/css";
+            link.media = styleSheet.media || "all";
+            link.href = styleSheet.href;
+            pipWindow.document.head.append(link);
+          }
+        });
+
+        pipWindow.document.body.style.margin = "0";
+        pipWindow.document.body.style.background = "#0f1115";
+        pipWindow.document.body.append(customPlayer);
+        customPlayer.style.width = "100%";
+        customPlayer.style.margin = "0";
+
+        pipWindow.addEventListener("pagehide", () => {
+          if (originalNextSibling) {
+            originalParent.insertBefore(customPlayer, originalNextSibling);
+          } else {
+            originalParent.append(customPlayer);
+          }
+          customPlayer.style.margin = "";
+          pipWindow = null;
+        });
+      };
+
+      const closePipWindow = () => {
+        if (pipWindow && !pipWindow.closed) {
+          pipWindow.close();
+        }
+      };
+
+      pipBtn.addEventListener("click", async () => {
+        if (!("documentPictureInPicture" in window)) return;
+        if (pipWindow && !pipWindow.closed) {
+          closePipWindow();
+          return;
+        }
+
+        try {
+          await openPipWindow();
+        } catch (error) {
+          setState("PiP blocked без user gesture");
+        }
+      });
+
+      const handleHiddenState = async () => {
+        if (document.visibilityState !== "hidden") return;
+        try {
+          await openPipWindow();
+        } catch (error) {
+          setState("PiP blocked без user gesture");
+        }
+      };
+
+      const handleVisibleState = () => {
+        if (document.visibilityState !== "visible") return;
+        closePipWindow();
+      };
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+          handleHiddenState();
+        } else {
+          handleVisibleState();
+        }
+      });
+
+      window.addEventListener("blur", () => {
+        setTimeout(handleHiddenState, 200);
+      });
+
+      window.addEventListener("focus", handleVisibleState);
+
+      seek.addEventListener("input", () => {
+        if (!Number.isFinite(video.duration)) return;
+        video.currentTime = (Number(seek.value) / 100) * video.duration;
+      });
+
+      loadBtn.addEventListener("click", () => {
+        player.attachSource(mpdInput.value.trim());
+        setState("loading");
+      });
+
+      qualitySelect.addEventListener("change", (event) => {
+        const value = event.target.value;
+        if (value === "auto") {
+          player.updateSettings({
+            streaming: { abr: { autoSwitchBitrate: { video: true } } },
+          });
+          player.setQualityFor("video", 0);
+        } else {
+          player.updateSettings({
+            streaming: { abr: { autoSwitchBitrate: { video: false } } },
+          });
+          player.setQualityFor("video", Number(value));
+        }
+      });
+
+      video.addEventListener("timeupdate", updateTime);
+      video.addEventListener("loadedmetadata", updateTime);
+      video.addEventListener("play", () => (playBtn.textContent = "Pause"));
+      video.addEventListener("pause", () => (playBtn.textContent = "Play"));
+
+      player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
+        populateQualities();
+        setState("ready");
+      });
+
+      player.on(dashjs.MediaPlayer.events.PLAYBACK_ERROR, (event) => {
+        setState(`error: ${event?.error?.message || "unknown"}`);
+      });
+
+      player.on(dashjs.MediaPlayer.events.FRAGMENT_LOADING_COMPLETED, () => {
+        const bitrate = player.getAverageThroughput("video");
+        if (bitrate) {
+          bitrateLabel.textContent = `${Math.round(bitrate)} kbps`;
+        }
+      });
+
+      setState("idle");
+      updateTime();
+    </script>
+  </body>
+</html>
